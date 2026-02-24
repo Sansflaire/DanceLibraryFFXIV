@@ -1,0 +1,11 @@
+{
+    "Author": "Sansflaire",
+    "Name": "Dance Library",
+    "InternalName": "DanceLibraryFFXIV",
+    "Punchline": "Browse and perform your dance emote mods from Penumbra.",
+    "Description": "Scans your Penumbra mod library for mods that override emote animations. Organizes dance emotes in one tab and other emotes in another. Click any entry to temporarily activate the mod with high priority and automatically perform the emote. Includes a settings editor for mods with configurable options.",
+    "ApplicableVersion": "any",
+    "DalamudApiLevel": 14,
+    "Tags": ["dance", "emote", "penumbra", "mod", "utility"],
+    "CategoryTags": ["Utility"]
+}

@@ -1,0 +1,72 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ============================================================
+       DanceLibraryFFXIV — Dalamud Plugin
+       Target: net10.0-windows (Dalamud API Level 14)
+       Scans Penumbra mods for emote overrides and performs dances.
+       ============================================================ -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <!-- x64 only — FFXIV is 64-bit only -->
+    <Platforms>x64</Platforms>
+    <Platform>x64</Platform>
+    <!-- Required for ChatSender.cs which calls game functions via FFXIVClientStructs -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Nullable reference types enabled for correctness -->
+    <Nullable>enable</Nullable>
+    <!-- Disable implicit usings so all namespaces are explicit and readable -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- Don't produce reference assembly — not needed for plugins -->
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <!-- Copy lock file assemblies so NuGet packages resolve correctly -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <!-- Don't append framework to output path (e.g., bin/Debug/ not bin/Debug/net10.0/) -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- Icon embedded into the DLL (shows in Windows Explorer); .ico must be at repo root -->
+    <ApplicationIcon>..\DanceLibraryIcon.ico</ApplicationIcon>
+    <AssemblyName>DanceLibraryFFXIV</AssemblyName>
+    <RootNamespace>DanceLibraryFFXIV</RootNamespace>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <!-- Path to Dalamud's reference DLLs — must match installed Dalamud version -->
+  <PropertyGroup>
+    <DalamudLibPath>$(APPDATA)\XIVLauncher\addon\Hooks\dev\</DalamudLibPath>
+  </PropertyGroup>
+
+  <!-- Dalamud reference assemblies — all Private="false" so they are NOT copied
+       to output (Dalamud injects them at runtime into the game process) -->
+  <ItemGroup>
+    <!-- Core Dalamud framework: services, IPC, plugin interface -->
+    <Reference Include="Dalamud" HintPath="$(DalamudLibPath)Dalamud.dll" Private="false" />
+    <!-- Dalamud common utilities -->
+    <Reference Include="Dalamud.Common" HintPath="$(DalamudLibPath)Dalamud.Common.dll" Private="false" />
+    <!-- ImGui bindings — use Dalamud.Bindings.ImGui namespace, NOT ImGuiNET -->
+    <Reference Include="Dalamud.Bindings.ImGui" HintPath="$(DalamudLibPath)Dalamud.Bindings.ImGui.dll" Private="false" />
+    <!-- FFXIV client structs — used by ChatSender for RaptureShellModule -->
+    <Reference Include="FFXIVClientStructs" HintPath="$(DalamudLibPath)FFXIVClientStructs.dll" Private="false" />
+    <!-- Required by FFXIVClientStructs for interop generator attributes -->
+    <Reference Include="InteropGenerator.Runtime" HintPath="$(DalamudLibPath)InteropGenerator.Runtime.dll" Private="false" />
+    <!-- Lumina — included for potential future game data lookups (Emote sheet, etc.) -->
+    <Reference Include="Lumina" HintPath="$(DalamudLibPath)Lumina.dll" Private="false" />
+    <Reference Include="Lumina.Excel" HintPath="$(DalamudLibPath)Lumina.Excel.dll" Private="false" />
+    <!-- Newtonsoft.Json — used by Dalamud's config serialization -->
+    <Reference Include="Newtonsoft.Json" HintPath="$(DalamudLibPath)Newtonsoft.Json.dll" Private="false" />
+    <!-- Serilog — used by IPluginLog internally -->
+    <Reference Include="Serilog" HintPath="$(DalamudLibPath)Serilog.dll" Private="false" />
+  </ItemGroup>
+
+  <!-- Post-build: auto-copy the compiled DLL to the devPlugins directory.
+       This enables the hot-reload workflow: build → disable plugin → re-enable.
+       The DLL lands next to DanceLibraryFFXIV.json (the manifest). -->
+  <Target Name="CopyToDevPlugins" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug'">
+    <Copy
+      SourceFiles="$(TargetPath)"
+      DestinationFolder="$(APPDATA)\XIVLauncher\devPlugins\DanceLibraryFFXIV\"
+      OverwriteReadOnlyFiles="true"
+    />
+  </Target>
+
+</Project>

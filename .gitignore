@@ -1,0 +1,31 @@
+# Build output
+src/bin/
+src/obj/
+
+# Compiled artifacts (deployed to devPlugins root by post-build)
+*.dll
+*.pdb
+*.deps.json
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+
+# NuGet
+*.nupkg
+packages/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local development notes (not relevant to consumers)
+CLAUDE.md
+DANCE_LIBRARY_DOCS.md
