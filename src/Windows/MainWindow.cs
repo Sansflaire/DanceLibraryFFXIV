@@ -98,6 +98,13 @@ public sealed class MainWindow : IDisposable
     // ── Backup Popup State ────────────────────────────────────────────────────────
 
     /// <summary>
+    /// Set to true for one frame after the "?" button is clicked to trigger
+    /// <c>ImGui.OpenPopup</c> for the How To modal on the next draw.
+    /// Reset to false immediately after the popup is opened.
+    /// </summary>
+    private bool _howToPopupPending;
+
+    /// <summary>
     /// Set to true for one frame after <see cref="DoBackup"/> runs to trigger
     /// <c>ImGui.OpenPopup</c> for the backup result modal on the next draw.
     /// Reset to false immediately after the popup is opened.
@@ -614,7 +621,8 @@ public sealed class MainWindow : IDisposable
         // --- Header row: plugin title + Move Mode + Backup + Refresh button ---
         DrawHeader();
 
-        // --- Backup result modal (must be drawn every frame inside Begin/End) ---
+        // --- How To and Backup modals (must be drawn every frame inside Begin/End) ---
+        DrawHowToPopup();
         DrawBackupPopup();
 
         // --- Status row: scan state, Penumbra availability ---
@@ -669,7 +677,7 @@ public sealed class MainWindow : IDisposable
         ImGui.TextColored(ColorTitle, "Dance Library");
 
         // --- Right-side controls (right-aligned) ---
-        // Build right section width estimate: Reset All + Backup + Refresh
+        // Build right section width estimate: ? + Reset All + Backup + Refresh
         var spacing    = ImGui.GetStyle().ItemSpacing.X;
         var padding    = ImGui.GetStyle().WindowPadding.X;
         var fpX        = ImGui.GetStyle().FramePadding.X;
@@ -677,9 +685,19 @@ public sealed class MainWindow : IDisposable
         var refreshW   = ImGui.CalcTextSize(refreshLbl).X + fpX * 2;
         var resetAllW  = ImGui.CalcTextSize("Reset All").X + fpX * 2;
         var backupW    = ImGui.CalcTextSize("Backup").X + fpX * 2;
-        var totalRightW = resetAllW + spacing + backupW + spacing + refreshW;
+        var howToW     = ImGui.CalcTextSize("?").X + fpX * 2;
+        var totalRightW = howToW + spacing + resetAllW + spacing + backupW + spacing + refreshW;
 
         ImGui.SameLine(ImGui.GetWindowWidth() - totalRightW - padding - 4f);
+
+        // --- How To button ---
+        // Opens a scrollable reference popup explaining every UI feature.
+        if (ImGui.SmallButton("?"))
+            _howToPopupPending = true;
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("How to use Dance Library");
+
+        ImGui.SameLine();
 
         // --- Reset All button ---
         // Disabled until a scan has completed (nothing to reset before that).
@@ -703,14 +721,129 @@ public sealed class MainWindow : IDisposable
         ImGui.SameLine();
 
         // --- Refresh button ---
+        // SmallButton matches the height of the other header buttons.
         if (_scanState == ScanState.Scanning) ImGui.BeginDisabled();
-        if (ImGui.Button(refreshLbl))
+        if (ImGui.SmallButton(refreshLbl))
         {
             // Re-check Penumbra availability in case it was loaded after plugin init.
             _penumbra.CheckAvailability();
             StartScan();
         }
         if (_scanState == ScanState.Scanning) ImGui.EndDisabled();
+    }
+
+    /// <summary>
+    /// Renders the "How To Use Dance Library" reference popup.
+    /// Must be called every frame inside the main window's Begin/End block.
+    /// Opens when <see cref="_howToPopupPending"/> is set by the "?" button.
+    ///
+    /// Uses a fixed-size window with an inner scrollable child region so the
+    /// content can exceed the popup height without resizing the window.
+    /// </summary>
+    private void DrawHowToPopup()
+    {
+        // Trigger: open the popup the frame after the ? button sets the flag.
+        if (_howToPopupPending)
+        {
+            ImGui.OpenPopup("How To Use Dance Library##dlhowto");
+            _howToPopupPending = false;
+        }
+
+        // Fixed size: tall enough to read comfortably, narrow enough to stay on screen.
+        ImGui.SetNextWindowSize(new Vector2(520, 580), ImGuiCond.Always);
+
+        // Center on screen.
+        var displaySize = ImGui.GetIO().DisplaySize;
+        ImGui.SetNextWindowPos(displaySize * 0.5f, ImGuiCond.Always, new Vector2(0.5f, 0.5f));
+
+        if (!ImGui.BeginPopupModal("How To Use Dance Library##dlhowto", ImGuiWindowFlags.NoResize))
+            return;
+
+        // --- Scrollable content region (leaves room for the Close button below) ---
+        ImGui.BeginChild("##howto_scroll", new Vector2(0, -35f), false, ImGuiWindowFlags.None);
+
+        // ── Performing Emotes ─────────────────────────────────────────────────────
+        ImGui.TextColored(ColorTitle, "Performing Emotes");
+        ImGui.Separator();
+        ImGui.Spacing();
+        ImGui.TextWrapped("Click a mod name or the Perform button to temporarily enable the mod via Penumbra and execute the emote in-game.");
+        ImGui.Spacing();
+        ImGui.TextWrapped("Reset  — removes the temporary Penumbra setting for that mod (returns it to its normal state).");
+        ImGui.TextWrapped("Reset All  — removes temporary settings from every mod at once.");
+        ImGui.Spacing();
+
+        // ── Row Buttons ───────────────────────────────────────────────────────────
+        ImGui.TextColored(ColorTitle, "Row Buttons");
+        ImGui.Separator();
+        ImGui.Spacing();
+        ImGui.TextWrapped("★ / ☆  — Favorite toggle. Favorited mods sort to the top of their section.");
+        ImGui.TextWrapped("[Category]  — Click to reassign the mod to a different tab.");
+        ImGui.TextWrapped("Perform  — Enable mod + execute emote.");
+        ImGui.TextWrapped("Settings  — Open the option editor for mods with configurable Penumbra options (sound, outfit variants, etc.).");
+        ImGui.TextWrapped("Pnb  — Jump directly to this mod in the Penumbra mod browser.");
+        ImGui.TextWrapped("Reset  — Remove this mod's temporary Penumbra setting.");
+        ImGui.Spacing();
+
+        // ── Star Ratings & Filter ─────────────────────────────────────────────────
+        ImGui.TextColored(ColorTitle, "Star Ratings & Filter");
+        ImGui.Separator();
+        ImGui.Spacing();
+        ImGui.TextWrapped("Open Settings for any mod to assign it a 1–5 star personal quality rating.");
+        ImGui.TextWrapped("Use the star filter dropdown (All / 1★+ / 2★+ … / 5★ only) at the top of each tab to show only mods at or above your chosen rating.");
+        ImGui.Spacing();
+
+        // ── Right-Click Context Menu ──────────────────────────────────────────────
+        ImGui.TextColored(ColorTitle, "Right-Click Menu (on any mod row)");
+        ImGui.Separator();
+        ImGui.Spacing();
+        ImGui.TextWrapped("Open in Penumbra  — Open this mod's page in Penumbra (single-mod only).");
+        ImGui.TextWrapped("Move to category  — Reassign to a different tab.");
+        ImGui.TextWrapped("Move to group  — Move into an existing group in this tab.");
+        ImGui.TextWrapped("Remove from group  — Return mod to ungrouped.");
+        ImGui.TextWrapped("Block mod  — Hide the mod from all plugin operations. Find it again in the Unblock tab; right-click there to restore it.");
+        ImGui.Spacing();
+        ImGui.TextWrapped("Ctrl+click or Shift+click to select multiple mods, then right-click for bulk Move / Block operations.");
+        ImGui.Spacing();
+
+        // ── Organizing with Groups ────────────────────────────────────────────────
+        ImGui.TextColored(ColorTitle, "Organizing with Groups");
+        ImGui.Separator();
+        ImGui.Spacing();
+        ImGui.TextWrapped("Click '+ New Group' at the bottom of any tab to create a collapsible named group.");
+        ImGui.TextWrapped("≡  — Drag handle on each row. Drag a mod onto another mod or group header to reorder or move it.");
+        ImGui.TextWrapped("▲/▼  — Arrow button on group headers. Drag to reorder groups.");
+        ImGui.TextWrapped("✎  — Rename a group inline.");
+        ImGui.TextWrapped("X  — Delete a group (its mods return to ungrouped).");
+        ImGui.TextWrapped("Right-click a group header for Rename / Delete options.");
+        ImGui.Spacing();
+
+        // ── Tabs ──────────────────────────────────────────────────────────────────
+        ImGui.TextColored(ColorTitle, "Tabs");
+        ImGui.Separator();
+        ImGui.Spacing();
+        ImGui.TextWrapped("Dance, Emote, NSFW, and Other are built-in tabs that cannot be renamed or deleted.");
+        ImGui.TextWrapped("Right-click any tab to create a custom tab with any name. Right-click a custom tab to rename or delete it.");
+        ImGui.TextWrapped("Deleting a custom tab moves all its mods to Other automatically.");
+        ImGui.TextWrapped("Unblock tab  — Lists mods you have blocked. Right-click any entry to unblock it.");
+        ImGui.Spacing();
+
+        // ── Header Buttons ────────────────────────────────────────────────────────
+        ImGui.TextColored(ColorTitle, "Header Buttons");
+        ImGui.Separator();
+        ImGui.Spacing();
+        ImGui.TextWrapped("Backup  — Copies your library layout (categories, groups, favorites, ratings) to a timestamped JSON file in your Downloads folder. Does not include Penumbra settings.");
+        ImGui.TextWrapped("Refresh  — Re-scans all Penumbra mods for emote overrides. Run this after installing or removing mods.");
+
+        ImGui.EndChild();
+
+        // --- Close button pinned to the bottom ---
+        ImGui.Spacing();
+        var closeW = 120f;
+        ImGui.SetCursorPosX((ImGui.GetWindowWidth() - closeW) * 0.5f);
+        if (ImGui.Button("Close", new Vector2(closeW, 0)))
+            ImGui.CloseCurrentPopup();
+
+        ImGui.EndPopup();
     }
 
     /// <summary>
