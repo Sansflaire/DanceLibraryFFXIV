@@ -34,6 +34,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
@@ -93,6 +94,21 @@ public sealed class MainWindow : IDisposable
 
     /// <summary>Current state of the mod scan (updated from background thread under <see cref="_lock"/>).</summary>
     private ScanState _scanState = ScanState.NotScanned;
+
+    // ── Backup Popup State ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Set to true for one frame after <see cref="DoBackup"/> runs to trigger
+    /// <c>ImGui.OpenPopup</c> for the backup result modal on the next draw.
+    /// Reset to false immediately after the popup is opened.
+    /// </summary>
+    private bool _backupPopupPending;
+
+    /// <summary>
+    /// Message shown inside the backup result modal.
+    /// Set by <see cref="DoBackup"/> to either a success path string or an error description.
+    /// </summary>
+    private string _backupResultMessage = string.Empty;
 
     /// <summary>Error message to show if the scan failed.</summary>
     private string _scanError = string.Empty;
@@ -595,8 +611,11 @@ public sealed class MainWindow : IDisposable
     /// </summary>
     private void DrawWindowContents()
     {
-        // --- Header row: plugin title + Move Mode + Refresh button ---
+        // --- Header row: plugin title + Move Mode + Backup + Refresh button ---
         DrawHeader();
+
+        // --- Backup result modal (must be drawn every frame inside Begin/End) ---
+        DrawBackupPopup();
 
         // --- Status row: scan state, Penumbra availability ---
         DrawStatusBar();
@@ -650,14 +669,15 @@ public sealed class MainWindow : IDisposable
         ImGui.TextColored(ColorTitle, "Dance Library");
 
         // --- Right-side controls (right-aligned) ---
-        // Build right section width estimate: Reset All + Refresh
+        // Build right section width estimate: Reset All + Backup + Refresh
         var spacing    = ImGui.GetStyle().ItemSpacing.X;
         var padding    = ImGui.GetStyle().WindowPadding.X;
         var fpX        = ImGui.GetStyle().FramePadding.X;
         var refreshLbl = _scanState == ScanState.Scanning ? "Scanning..." : "Refresh";
         var refreshW   = ImGui.CalcTextSize(refreshLbl).X + fpX * 2;
         var resetAllW  = ImGui.CalcTextSize("Reset All").X + fpX * 2;
-        var totalRightW = resetAllW + spacing + refreshW;
+        var backupW    = ImGui.CalcTextSize("Backup").X + fpX * 2;
+        var totalRightW = resetAllW + spacing + backupW + spacing + refreshW;
 
         ImGui.SameLine(ImGui.GetWindowWidth() - totalRightW - padding - 4f);
 
@@ -673,6 +693,15 @@ public sealed class MainWindow : IDisposable
 
         ImGui.SameLine();
 
+        // --- Backup button ---
+        // Copies the plugin config JSON to the user's Downloads folder with a timestamp.
+        if (ImGui.SmallButton("Backup"))
+            DoBackup();
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Save a copy of your library layout to Downloads");
+
+        ImGui.SameLine();
+
         // --- Refresh button ---
         if (_scanState == ScanState.Scanning) ImGui.BeginDisabled();
         if (ImGui.Button(refreshLbl))
@@ -682,6 +711,78 @@ public sealed class MainWindow : IDisposable
             StartScan();
         }
         if (_scanState == ScanState.Scanning) ImGui.EndDisabled();
+    }
+
+    /// <summary>
+    /// Copies the plugin config JSON to the user's Downloads folder with a timestamp suffix.
+    /// Sets <see cref="_backupPopupPending"/> so the result modal opens on the next frame.
+    ///
+    /// Source: %APPDATA%\XIVLauncher\pluginConfigs\DanceLibraryFFXIV.json
+    /// Destination: %USERPROFILE%\Downloads\DanceLibraryFFXIV_yyyy-MM-dd_HH-mm-ss.json
+    /// </summary>
+    private void DoBackup()
+    {
+        try
+        {
+            // Resolve source — the Dalamud-managed config file for this plugin.
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var src     = Path.Combine(appData, "XIVLauncher", "pluginConfigs", "DanceLibraryFFXIV.json");
+
+            // Resolve destination — timestamped file in the user's Downloads folder.
+            var downloads = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+            var fileName  = $"DanceLibraryFFXIV_{timestamp}.json";
+            var dst       = Path.Combine(downloads, fileName);
+
+            File.Copy(src, dst, overwrite: false);
+
+            _backupResultMessage = $"Backup saved!\n\nDownloads\\{fileName}";
+            _log.Info($"[DanceLibrary] Backup saved to {dst}");
+        }
+        catch (Exception ex)
+        {
+            _backupResultMessage = $"Backup failed:\n{ex.Message}";
+            _log.Error(ex, "[DanceLibrary] Backup failed");
+        }
+
+        // Signal the popup to open on the next draw frame.
+        _backupPopupPending = true;
+    }
+
+    /// <summary>
+    /// Renders the backup result modal popup.
+    /// Must be called every frame inside the main window's Begin/End block.
+    /// Opens automatically when <see cref="_backupPopupPending"/> is set by <see cref="DoBackup"/>.
+    ///
+    /// The modal is AlwaysAutoResize so it fits its message without manual sizing.
+    /// Centered on screen via SetNextWindowPos with a 0.5/0.5 pivot.
+    /// </summary>
+    private void DrawBackupPopup()
+    {
+        // Trigger: open the popup the frame after DoBackup() sets the flag.
+        if (_backupPopupPending)
+        {
+            ImGui.OpenPopup("Backup Result##dlbk");
+            _backupPopupPending = false;
+        }
+
+        // Center the modal on the display.
+        var displaySize = ImGui.GetIO().DisplaySize;
+        ImGui.SetNextWindowPos(displaySize * 0.5f, ImGuiCond.Always, new Vector2(0.5f, 0.5f));
+
+        // --- Modal contents ---
+        if (ImGui.BeginPopupModal("Backup Result##dlbk", ImGuiWindowFlags.AlwaysAutoResize))
+        {
+            ImGui.TextUnformatted(_backupResultMessage);
+            ImGui.Spacing();
+
+            // OK button: dismiss the modal.
+            if (ImGui.Button("OK", new Vector2(120, 0)))
+                ImGui.CloseCurrentPopup();
+
+            ImGui.EndPopup();
+        }
     }
 
     /// <summary>
